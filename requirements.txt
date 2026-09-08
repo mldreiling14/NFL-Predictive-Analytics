@@ -5,6 +5,6 @@ xgboost
 requests
 python-dotenv
 ipykernel
-pyarrow
+pyarrow 
 joblib
 streamlit
