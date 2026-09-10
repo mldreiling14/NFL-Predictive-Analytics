@@ -1,0 +1,43 @@
+{% extends "base.html" %}
+{% block content %}
+<a href="/?week={{ week }}" style="color:var(--text-muted); text-decoration:none;">← Back to all games</a>
+
+<h2>{{ game.away_team }} @ {{ game.home_team }}</h2>
+<p style="color:var(--text-muted);">{{ gameday_display }}</p>
+
+<div class="card">
+    <div class="game-row">
+        <div style="text-align:center;">
+            <img class="team-logo" style="width:48px; height:48px;" src="{{ team_logos.get(game.away_team, '') }}"><br>
+            <strong style="font-size:22px;">{{ "%.0f"|format(game.away_win_prob * 100) }}%</strong>
+        </div>
+        <div style="text-align:center;">
+            <img class="team-logo" style="width:48px; height:48px;" src="{{ team_logos.get(game.home_team, '') }}"><br>
+            <strong style="font-size:22px;">{{ "%.0f"|format(game.home_win_prob * 100) }}%</strong>
+        </div>
+    </div>
+    <div style="display:flex; width:100%; height:20px; border-radius:6px; overflow:hidden; margin-top:12px;">
+        <div style="width:{{ game.away_win_prob * 100 }}%; background:{{ away_color }}; border-right:2px solid var(--surface-1);"></div>
+        <div style="width:{{ game.home_win_prob * 100 }}%; background:{{ home_color }};"></div>
+    </div>
+</div>
+
+<h3>🔑 Key Players</h3>
+{% for team in [game.away_team, game.home_team] %}
+<p><strong>{{ team }}</strong>: QB {{ key_players[team].qb }} · RB1 {{ key_players[team].rb }} · WR1 {{ key_players[team].wr }}</p>
+{% endfor %}
+
+<h3>🏥 Injury Report</h3>
+{% for team in [game.away_team, game.home_team] %}
+<p><strong>{{ team }}</strong></p>
+{% if injuries[team] is none %}
+<p style="color:var(--text-muted);">Injury reports not yet published.</p>
+{% elif injuries[team]|length == 0 %}
+<p style="color:var(--text-muted);">No injury designations reported.</p>
+{% else %}
+{% for entry in injuries[team] %}
+<p style="color:var(--text-secondary);">{{ entry.full_name }} ({{ entry.position }}) — {{ entry.report_status }}</p>
+{% endfor %}
+{% endif %}
+{% endfor %}
+{% endblock %}

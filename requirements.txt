@@ -8,3 +8,6 @@ ipykernel
 pyarrow 
 joblib
 streamlit
+fastapi
+uvicorn
+jinja2

@@ -1,0 +1,37 @@
+{% extends "base.html" %}
+{% block content %}
+<h1>🏈 NFL Win Probability</h1>
+<p style="color:var(--text-muted);">Pre-game win probabilities generated from a model trained on 2015–2025 data.</p>
+
+<form method="get">
+    <select name="week" onchange="this.form.submit()">
+        {% for w in weeks %}
+        <option value="{{ w }}" {% if w == selected_week %}selected{% endif %}>Week {{ w }}</option>
+        {% endfor %}
+    </select>
+</form>
+
+<br>
+
+{% for game in predictions %}
+<a class="card" href="/game/{{ game.game_id }}?week={{ selected_week }}">
+    <div class="game-row">
+        <div>
+            <img class="team-logo" src="{{ team_logos.get(game.away_team, '') }}">
+            <strong>{{ game.away_team }}</strong>
+            <span style="font-family:var(--font-mono);">{{ "%.0f"|format(game.away_win_prob * 100) }}%</span>
+        </div>
+        <span style="color:var(--text-muted); font-size:12px;">@</span>
+        <div>
+            <span style="font-family:var(--font-mono);">{{ "%.0f"|format(game.home_win_prob * 100) }}%</span>
+            <strong>{{ game.home_team }}</strong>
+            <img class="team-logo" src="{{ team_logos.get(game.home_team, '') }}">
+        </div>
+    </div>
+    <div style="display:flex; width:100%; height:8px; border-radius:4px; overflow:hidden; margin-top:10px;">
+        <div style="width:{{ game.away_win_prob * 100 }}%; background:{{ away_colors[game.game_id] }}; border-right:1px solid var(--surface-1);"></div>
+        <div style="width:{{ game.home_win_prob * 100 }}%; background:{{ home_colors[game.game_id] }};"></div>
+    </div>
+</a>
+{% endfor %}
+{% endblock %}
