@@ -2,7 +2,25 @@ import pandas as pd
 import sqlite3
 import nflreadpy as nfl
 
-
+def safe_load_pfr_advstats(seasons, stat_type):
+    """
+    Pulls PFR advanced stats season-by-season, skipping any season
+    whose data hasn't been published yet (common early in a new
+    season - the underlying files simply don't exist yet on
+    nflverse's servers). Automatically picks up newly available
+    seasons later without needing any code changes.
+    """
+    frames = []
+    for s in seasons:
+        try:
+            df = nfl.load_pfr_advstats(seasons=[s], stat_type=stat_type).to_pandas()
+            frames.append(df)
+        except Exception as e:
+            print(f"Skipping PFR {stat_type} stats for {s}: {e}")
+    if frames:
+        return pd.concat(frames, ignore_index=True)
+    return pd.DataFrame()
+    
 def build_snapshots(db_path="data/nfl.db", seasons=range(2015, 2026)):
     """
     Builds every 'current state' table needed for live predictions:
@@ -32,7 +50,7 @@ def build_snapshots(db_path="data/nfl.db", seasons=range(2015, 2026)):
     physical = players[['pfr_id', 'height', 'weight']].dropna().rename(columns={'pfr_id': 'pfr_player_id'})
 
     pfr_seasons = [s for s in seasons if s >= 2018]
-    adv_def_full = nfl.load_pfr_advstats(seasons=pfr_seasons, stat_type='def').to_pandas()
+    adv_def_full = safe_load_pfr_advstats(pfr_seasons, 'def')
     adv_def_full = adv_def_full[['game_id', 'season', 'week', 'team', 'pfr_player_id',
                                   'def_completion_pct', 'def_passer_rating_allowed']]
 
@@ -177,7 +195,7 @@ def build_snapshots(db_path="data/nfl.db", seasons=range(2015, 2026)):
     current_team_stats = ts.loc[ts.groupby('team')['gameday'].idxmax()][
         ['team', 'recent_epa_allowed', 'recent_yards_allowed', 'recent_takeaways', 'recent_sack_rate']]
 
-    press = nfl.load_pfr_advstats(seasons=pfr_seasons, stat_type='pass').to_pandas()
+    press = safe_load_pfr_advstats(pfr_seasons, 'pass')
     press = press[['game_id', 'team', 'times_pressured_pct']]
     press = press.merge(game_dates, on='game_id', how='left').sort_values(['team', 'gameday']).reset_index(drop=True)
     press['recent_pressure_pct'] = press.groupby('team')['times_pressured_pct'].transform(
