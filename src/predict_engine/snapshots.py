@@ -226,8 +226,14 @@ def build_snapshots(db_path="data/nfl.db", seasons=range(2015, 2026)):
 
     current_cb_starters = current_cb_starters.merge(each_cb_current, on='pfr_player_id', how='left')
 
+    # Fill missing completion-allowed values with a neutral placeholder before selecting -
+    # prevents a crash when a team's corners have no real PFR coverage history at all
+    # (e.g. newer players, or simply limited data for the season range in use).
+    # A real value is always preferred over the placeholder when one exists.
+    current_cb_starters['_completion_for_selection'] = current_cb_starters['recent_def_completion_pct'].fillna(1.0)
+
     current_primary_cb = current_cb_starters.loc[
-        current_cb_starters.groupby('team')['recent_def_completion_pct'].idxmin()
+        current_cb_starters.groupby('team')['_completion_for_selection'].idxmin()
     ][['team', 'pfr_player_id', 'recent_def_completion_pct', 'recent_def_passer_rating_allowed']]
     current_primary_cb = current_primary_cb.merge(physical, on='pfr_player_id', how='left')
 
