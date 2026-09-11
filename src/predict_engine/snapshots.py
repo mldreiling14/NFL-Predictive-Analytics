@@ -2,6 +2,26 @@ import pandas as pd
 import sqlite3
 import nflreadpy as nfl
 
+def safe_load_depth_charts(seasons):
+    """
+    Attempts to load the current season's depth chart, falling back
+    to progressively older seasons if the current one fails (e.g. a
+    transient server error, or data not yet published this early in
+    a season). Falling back to last season's depth chart is an
+    imperfect but reasonable proxy - most teams' starters don't
+    change completely between seasons, and it's far better than
+    having no starter information at all.
+    """
+    for s in sorted(seasons, reverse=True):
+        try:
+            df = nfl.load_depth_charts(seasons=[s]).to_pandas()
+            if s != max(seasons):
+                print(f"Using {s} depth charts as fallback (current season unavailable)")
+            return df
+        except Exception as e:
+            print(f"Depth charts for {s} failed: {e}")
+    raise RuntimeError("Could not load depth charts for any season in range")
+
 def safe_load_pfr_advstats(seasons, stat_type):
     """
     Pulls PFR advanced stats season-by-season, skipping any season
@@ -41,6 +61,13 @@ def build_snapshots(db_path="data/nfl.db", seasons=range(2015, 2026)):
     df_full['home_win'] = (df_full['home_score'] > df_full['away_score']).astype(int)
 
     game_dates = df_full[['game_id', 'gameday']].drop_duplicates()
+
+    # The local database may not yet include the current season's real games
+    # (it needs to be manually rebuilt via fetch_data.py/build_features.py).
+    # Fill any gaps using the live schedule directly, so today's real games
+    # always resolve to a real date, even before the local DB catches up.
+    sched_dates = nfl.load_schedules(seasons=list(seasons)).to_pandas()[['game_id', 'gameday']]
+    game_dates = pd.concat([game_dates, sched_dates]).drop_duplicates(subset='game_id', keep='first')
 
     player_stats = nfl.load_player_stats(seasons=list(seasons)).to_pandas()
     snaps_full = nfl.load_snap_counts(seasons=list(seasons)).to_pandas()
@@ -106,7 +133,7 @@ def build_snapshots(db_path="data/nfl.db", seasons=range(2015, 2026)):
         'current_def_rating': [def_rating[t] for t in off_rating.keys()]
     })
 
-    depth = nfl.load_depth_charts(seasons=[max(seasons)]).to_pandas()
+    depth = safe_load_depth_charts(seasons)
     qb_depth = depth[(depth['pos_abb'] == 'QB') & (depth['pos_rank'] == 1)].copy()
     qb_depth['dt'] = pd.to_datetime(qb_depth['dt'])
     current_qb_starter = qb_depth.loc[qb_depth.groupby('team')['dt'].idxmax()][['team', 'gsis_id']].rename(
