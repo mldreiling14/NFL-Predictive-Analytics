@@ -39,8 +39,10 @@ templates = Jinja2Templates(directory=os.path.join(os.path.dirname(__file__), "t
 
 # Loaded once at startup - a real refresh strategy comes later
 model_bundle = load_model(model_path=os.path.join(os.path.dirname(__file__), "..", "models", "win_probability_model.joblib"))
-snapshots = build_snapshots(db_path=os.path.join(os.path.dirname(__file__), "..", "data", "nfl.db"))
-
+snapshots = build_snapshots(
+    db_path=os.path.join(os.path.dirname(__file__), "..", "data", "nfl.db"),
+    seasons=range(2024, 2027)
+)
 teams_df = nfl.load_teams().to_pandas()
 team_logos = dict(zip(teams_df['team_abbr'], teams_df['team_logo_espn']))
 team_colors = dict(zip(teams_df['team_abbr'], teams_df['team_color']))
