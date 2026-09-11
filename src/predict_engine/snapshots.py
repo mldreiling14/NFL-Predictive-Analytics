@@ -56,10 +56,12 @@ def build_snapshots(db_path="data/nfl.db", seasons=range(2015, 2026)):
     Returns a dict of DataFrames, one per snapshot type.
     """
     conn = sqlite3.connect(db_path)
-    df_full = pd.read_sql_query("SELECT * FROM games_with_features", conn)
+    df_full = pd.read_sql_query(
+        "SELECT game_id, season, week, gameday, home_team, away_team, home_team_std, away_team_std, "
+        "home_score, away_score, home_coach, away_coach, div_game FROM games_with_features", conn
+    )
     conn.close()
     df_full['home_win'] = (df_full['home_score'] > df_full['away_score']).astype(int)
-
     game_dates = df_full[['game_id', 'gameday']].drop_duplicates()
 
     # The local database may not yet include the current season's real games
@@ -70,8 +72,18 @@ def build_snapshots(db_path="data/nfl.db", seasons=range(2015, 2026)):
     game_dates = pd.concat([game_dates, sched_dates]).drop_duplicates(subset='game_id', keep='first')
 
     player_stats = nfl.load_player_stats(seasons=list(seasons)).to_pandas()
+    player_stats = player_stats[[
+        'player_id', 'game_id', 'team', 'position',
+        'passing_yards', 'passing_tds', 'passing_interceptions', 'passing_epa', 'attempts',
+        'rushing_yards', 'rushing_epa',
+        'receiving_yards', 'receiving_epa', 'targets',
+        'def_sacks', 'def_qb_hits',
+        'fantasy_points_ppr'
+    ]]
     snaps_full = nfl.load_snap_counts(seasons=list(seasons)).to_pandas()
+    snaps_full = snaps_full[['pfr_player_id', 'game_id', 'position', 'offense_pct', 'defense_pct']]
     players = nfl.load_players().to_pandas()
+    players = players[['gsis_id', 'pfr_id', 'display_name', 'height', 'weight']]
     crosswalk = players[['gsis_id', 'pfr_id']].dropna().rename(
         columns={'gsis_id': 'player_id', 'pfr_id': 'pfr_player_id'})
     physical = players[['pfr_id', 'height', 'weight']].dropna().rename(columns={'pfr_id': 'pfr_player_id'})
