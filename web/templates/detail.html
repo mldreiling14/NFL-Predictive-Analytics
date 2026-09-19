@@ -5,21 +5,25 @@
 <h2>{{ game.away_team }} @ {{ game.home_team }}</h2>
 <p style="color:var(--text-muted);">{{ gameday_display }}</p>
 
-<div class="card">
+<div class="card" data-game-id="{{ game.game_id }}" data-week="{{ week }}"
+     data-live="{{ 'true' if live.state == 'in' else 'false' }}">
     <div class="game-row">
         <div style="text-align:center;">
             <img class="team-logo" style="width:48px; height:48px;" src="{{ team_logos.get(game.away_team, '') }}"><br>
-            <strong style="font-size:22px;">{{ "%.0f"|format(game.away_win_prob * 100) }}%</strong>
+            <strong class="away-pct" style="font-size:22px;">{{ "%.0f"|format(display_away_prob * 100) }}%</strong>
         </div>
         <div style="text-align:center;">
             <img class="team-logo" style="width:48px; height:48px;" src="{{ team_logos.get(game.home_team, '') }}"><br>
-            <strong style="font-size:22px;">{{ "%.0f"|format(game.home_win_prob * 100) }}%</strong>
+            <strong class="home-pct" style="font-size:22px;">{{ "%.0f"|format(display_home_prob * 100) }}%</strong>
         </div>
     </div>
     <div style="display:flex; width:100%; height:20px; border-radius:6px; overflow:hidden; margin-top:12px;">
-        <div style="width:{{ game.away_win_prob * 100 }}%; background:{{ away_color }}; border-right:2px solid var(--surface-1);"></div>
-        <div style="width:{{ game.home_win_prob * 100 }}%; background:{{ home_color }};"></div>
+        <div class="away-bar" style="width:{{ display_away_prob * 100 }}%; background:{{ away_color }}; border-right:2px solid var(--surface-1);"></div>
+        <div class="home-bar" style="width:{{ display_home_prob * 100 }}%; background:{{ home_color }};"></div>
     </div>
+    <p style="color:var(--text-muted); font-size:12px; margin-top:8px; text-align:center;">
+        Pre-game: {{ game.away_team }} {{ "%.0f"|format(pregame_away_prob * 100) }}% — {{ "%.0f"|format(pregame_home_prob * 100) }}% {{ game.home_team }}
+    </p>
 </div>
 
 {% if live.available %}
@@ -64,3 +68,32 @@
 {% endif %}
 {% endfor %}
 {% endblock %}
+
+<script>
+function pollDetailLive(gameId, week) {
+    fetch(`/api/live/${gameId}?week=${week}`)
+        .then(r => r.json())
+        .then(data => {
+            const card = document.querySelector(`[data-game-id="${gameId}"]`);
+            if (!card) return;
+
+            const awayPct = data.away_win_prob * 100;
+            const homePct = data.home_win_prob * 100;
+            card.querySelector('.away-pct').textContent = Math.round(awayPct) + '%';
+            card.querySelector('.home-pct').textContent = Math.round(homePct) + '%';
+            card.querySelector('.away-bar').style.width = awayPct + '%';
+            card.querySelector('.home-bar').style.width = homePct + '%';
+
+            if (data.state === 'in') {
+                setTimeout(() => pollDetailLive(gameId, week), 15000);
+            }
+            // state === 'post' - leave the bar at its final 100/0 and stop polling
+        })
+        .catch(err => console.error('Live poll failed', err));
+}
+
+const detailCard = document.querySelector('[data-live="true"]');
+if (detailCard) {
+    setTimeout(() => pollDetailLive(detailCard.dataset.gameId, detailCard.dataset.week), 15000);
+}
+</script>

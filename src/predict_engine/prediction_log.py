@@ -63,3 +63,15 @@ def get_logged_predictions(db_path, season=None, week=None):
     df = pd.read_sql_query(query, conn, params=params)
     conn.close()
     return df
+
+def get_logged_prediction_for_game(game_id, db_path):
+    conn = sqlite3.connect(db_path)
+    _ensure_table(conn)
+    row = conn.execute(
+        "SELECT home_win_prob, away_win_prob FROM logged_predictions WHERE game_id = ?",
+        (game_id,)
+    ).fetchone()
+    conn.close()
+    if row is None:
+        return None
+    return {'home_win_prob': row[0], 'away_win_prob': row[1]}

@@ -6,3 +6,5 @@ from .matchup import build_matchup_features, predict_matchup, predict_week, DETA
 from .utils import moneyline_to_prob
 from .live import get_live_game_data
 from .prediction_log import log_predictions, get_logged_predictions
+from .live_wp import get_live_win_probability
+from .prediction_log import log_predictions, get_logged_predictions, get_logged_prediction_for_game

@@ -14,24 +14,87 @@
 <br>
 
 {% for game in predictions %}
-<a class="card" href="/game/{{ game.game_id }}?week={{ selected_week }}">
+{% set l = live_data.get(game.game_id) %}
+{% set probs = namespace(home=game.home_win_prob * 100, away=game.away_win_prob * 100) %}
+{% if l and l.state == 'post' %}
+    {% if l.home_score > l.away_score %}
+        {% set probs.home = 100 %}
+        {% set probs.away = 0 %}
+    {% elif l.away_score > l.home_score %}
+        {% set probs.home = 0 %}
+        {% set probs.away = 100 %}
+    {% endif %}
+{% endif %}
+<a class="card" href="/game/{{ game.game_id }}?week={{ selected_week }}"
+   data-game-id="{{ game.game_id }}" data-week="{{ selected_week }}"
+   data-live="{{ 'true' if l and l.state == 'in' else 'false' }}">
     <div class="game-row">
         <div>
             <img class="team-logo" src="{{ team_logos.get(game.away_team, '') }}">
             <strong>{{ game.away_team }}</strong>
-            <span style="font-family:var(--font-mono);">{{ "%.0f"|format(game.away_win_prob * 100) }}%</span>
+            <span class="away-pct" style="font-family:var(--font-mono);">{{ "%.0f"|format(probs.away) }}%</span>
+            {% if l and l.state in ['in', 'post'] %}
+            <div class="away-score" style="font-family:var(--font-mono); font-size:20px; font-weight:600; margin-top:2px;">{{ l.away_score }}</div>
+            {% endif %}
         </div>
-        <span style="color:var(--text-muted); font-size:12px;">@</span>
+        <span class="game-status" style="color:var(--text-muted); font-size:12px; text-align:center;">
+            {% if l and l.state == 'in' %}
+                LIVE<br>Q{{ l.quarter }} {{ l.clock }}
+            {% elif l and l.state == 'post' %}
+                FINAL
+            {% else %}
+                @
+            {% endif %}
+        </span>
         <div>
-            <span style="font-family:var(--font-mono);">{{ "%.0f"|format(game.home_win_prob * 100) }}%</span>
+            <span class="home-pct" style="font-family:var(--font-mono);">{{ "%.0f"|format(probs.home) }}%</span>
             <strong>{{ game.home_team }}</strong>
             <img class="team-logo" src="{{ team_logos.get(game.home_team, '') }}">
+            {% if l and l.state in ['in', 'post'] %}
+            <div class="home-score" style="font-family:var(--font-mono); font-size:20px; font-weight:600; margin-top:2px; text-align:right;">{{ l.home_score }}</div>
+            {% endif %}
         </div>
     </div>
     <div style="display:flex; width:100%; height:8px; border-radius:4px; overflow:hidden; margin-top:10px;">
-        <div style="width:{{ game.away_win_prob * 100 }}%; background:{{ away_colors[game.game_id] }}; border-right:1px solid var(--surface-1);"></div>
-        <div style="width:{{ game.home_win_prob * 100 }}%; background:{{ home_colors[game.game_id] }};"></div>
+        <div class="away-bar" style="width:{{ probs.away }}%; background:{{ away_colors[game.game_id] }}; border-right:1px solid var(--surface-1);"></div>
+        <div class="home-bar" style="width:{{ probs.home }}%; background:{{ home_colors[game.game_id] }};"></div>
     </div>
 </a>
 {% endfor %}
+
+<script>
+function pollLiveGame(gameId, week) {
+    fetch(`/api/live/${gameId}?week=${week}`)
+        .then(r => r.json())
+        .then(data => {
+            const card = document.querySelector(`[data-game-id="${gameId}"]`);
+            if (!card) return;
+
+            if (data.home_score !== null) {
+                card.querySelector('.away-score').textContent = data.away_score;
+                card.querySelector('.home-score').textContent = data.home_score;
+            }
+            const awayPct = data.away_win_prob * 100;
+            const homePct = data.home_win_prob * 100;
+            card.querySelector('.away-pct').textContent = Math.round(awayPct) + '%';
+            card.querySelector('.home-pct').textContent = Math.round(homePct) + '%';
+            card.querySelector('.away-bar').style.width = awayPct + '%';
+            card.querySelector('.home-bar').style.width = homePct + '%';
+
+            const statusEl = card.querySelector('.game-status');
+            if (data.state === 'in') {
+                statusEl.innerHTML = `LIVE<br>Q${data.quarter} ${data.clock}`;
+                setTimeout(() => pollLiveGame(gameId, week), 15000);
+            } else if (data.state === 'post') {
+                statusEl.textContent = 'FINAL';
+                // stop polling - game is over
+            }
+        })
+        .catch(err => console.error('Live poll failed for', gameId, err));
+}
+
+document.querySelectorAll('.card[data-live="true"]').forEach(card => {
+    setTimeout(() => pollLiveGame(card.dataset.gameId, card.dataset.week), 15000);
+});
+</script>
 {% endblock %}
