@@ -31,7 +31,7 @@ from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 import nflreadpy as nfl
 
-from predict_engine import load_model, build_snapshots, predict_week
+from predict_engine import load_model, build_snapshots, predict_week, log_predictions
 
 app = FastAPI()
 app.mount("/static", StaticFiles(directory=os.path.join(os.path.dirname(__file__), "static")), name="static")
@@ -68,6 +68,11 @@ def home(request: Request, week: int = None):
 
     selected_week = week if week else weeks[0]
     predictions = predict_week(2026, selected_week, snapshots, model_bundle)
+    log_predictions(
+        predictions,
+        db_path=os.path.join(os.path.dirname(__file__), "..", "data", "nfl.db"),
+        season=2026, week=selected_week
+    )
 
     home_colors, away_colors = {}, {}
     for _, g in predictions.iterrows():
@@ -89,6 +94,7 @@ def home(request: Request, week: int = None):
     )
 
 from predict_engine import get_injury_report
+from predict_engine import get_live_game_data
 import pandas as pd
 
 
@@ -104,6 +110,11 @@ def safe_name(table, team_col, name_col='display_name'):
 @app.get("/game/{game_id}")
 def game_detail(request: Request, game_id: str, week: int):
     predictions = predict_week(2026, week, snapshots, model_bundle)
+    log_predictions(
+        predictions,
+        db_path=os.path.join(os.path.dirname(__file__), "..", "data", "nfl.db"),
+        season=2026, week=week
+    )
     game_row = predictions[predictions['game_id'] == game_id]
 
     if game_row.empty:
@@ -125,6 +136,7 @@ def game_detail(request: Request, game_id: str, week: int):
         team: get_injury_report(team, 2026, week)
         for team in [game['home_team'], game['away_team']]
     }
+    live = get_live_game_data(game['home_team'], game['away_team'], game['gameday'])
 
     return templates.TemplateResponse(
         request=request, name="detail.html",
@@ -137,5 +149,6 @@ def game_detail(request: Request, game_id: str, week: int):
             "away_color": away_color,
             "key_players": key_players,
             "injuries": injuries,
+            "live": live,
         }
     )

@@ -22,6 +22,29 @@
     </div>
 </div>
 
+{% if live.available %}
+<div class="card" style="border-color:#ff4b4b;">
+    <span style="color:#ff4b4b; font-weight:600; font-size:13px;">🔴 LIVE — Q{{ live.quarter }} {{ live.clock }}</span>
+    <div style="font-size:28px; font-weight:600; margin:6px 0;">
+        {{ game.away_team }} {{ live.away_score }} — {{ live.home_score }} {{ game.home_team }}
+    </div>
+    {% if live.possession_team %}
+    <p style="margin:0; color:var(--text-secondary);">
+        🏈 {{ live.possession_team }} ball{% if live.down_distance %} · {{ live.down_distance }}{% endif %}
+    </p>
+    {% endif %}
+</div>
+{% elif live.state == 'post' %}
+<div class="card">
+    <p style="color:var(--text-muted); margin:0 0 4px;">Final Score</p>
+    <div style="font-size:22px; font-weight:600;">
+        {{ game.away_team }} {{ live.away_score }} — {{ live.home_score }} {{ game.home_team }}
+    </div>
+</div>
+{% elif live.state == 'pre' %}
+<p style="color:var(--text-muted);">Game hasn't started yet — check back at kickoff for live tracking.</p>
+{% endif %}
+
 <h3>🔑 Key Players</h3>
 {% for team in [game.away_team, game.home_team] %}
 <p><strong>{{ team }}</strong>: QB {{ key_players[team].qb }} · RB1 {{ key_players[team].rb }} · WR1 {{ key_players[team].wr }}</p>
