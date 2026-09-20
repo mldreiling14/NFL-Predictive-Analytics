@@ -55,6 +55,9 @@
 {% endfor %}
 
 <h3>🏥 Injury Report</h3>
+<p style="color:var(--text-muted); font-size:12px; margin-top:-4px; margin-bottom:10px;">
+    Injury data as of {{ injury_fetched_at }}
+</p>
 {% for team in [game.away_team, game.home_team] %}
 <p><strong>{{ team }}</strong></p>
 {% if injuries[team] is none %}

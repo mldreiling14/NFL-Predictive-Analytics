@@ -1,6 +1,8 @@
 import os
 import sys
 import time
+from datetime import datetime
+from zoneinfo import ZoneInfo
 
 import nflreadpy as nfl
 import pandas as pd
@@ -107,6 +109,25 @@ def get_cached_live_data(game_id, home_team, away_team, gameday):
     return live
 
 
+# Injury designations update a few times a day (not second to second), so a
+# 30-minute TTL keeps the detail page fast without serving a stale-by-days
+# report. Cached per team/season/week, mirroring the _live_cache pattern
+# above; also lets the detail page show when the report was actually pulled.
+_injury_cache = {}   # {(team, season, week): (fetched_at, injuries)}
+INJURY_CACHE_TTL_SECONDS = 30 * 60
+
+
+def get_cached_injury_report(team, season, week):
+    now = time.time()
+    key = (team, season, week)
+    cached = _injury_cache.get(key)
+    if cached and (now - cached[0]) < INJURY_CACHE_TTL_SECONDS:
+        return cached
+    result = get_injury_report(team, season, week)
+    _injury_cache[key] = (now, result)
+    return _injury_cache[key]
+
+
 def get_pregame_prediction(game_id, game_row):
     """Reads the frozen pre-game prediction from the log, falling back to
     the in-memory value only if it somehow hasn't been logged yet."""
@@ -197,10 +218,18 @@ def game_detail(request: Request, game_id: str, week: int):
         for team in [game['home_team'], game['away_team']]
     }
 
-    injuries = {
-        team: get_injury_report(team, 2026, week)
-        for team in [game['home_team'], game['away_team']]
-    }
+    injuries = {}
+    injury_fetched_at = None
+    for team in [game['home_team'], game['away_team']]:
+        fetched_at, report = get_cached_injury_report(team, 2026, week)
+        injuries[team] = report
+        if injury_fetched_at is None or fetched_at < injury_fetched_at:
+            injury_fetched_at = fetched_at
+
+    injury_fetched_at_display = datetime.fromtimestamp(
+        injury_fetched_at, tz=ZoneInfo("America/New_York")
+    ).strftime('%I:%M %p ET, %B %d').lstrip('0')
+
     live = get_cached_live_data(game_id, game['home_team'], game['away_team'], game['gameday'])
     home_prob = get_live_win_probability(game['home_team'], game['away_team'], live, game['home_win_prob'])
     return templates.TemplateResponse(
@@ -214,6 +243,7 @@ def game_detail(request: Request, game_id: str, week: int):
             "away_color": away_color,
             "key_players": key_players,
             "injuries": injuries,
+            "injury_fetched_at": injury_fetched_at_display,
             "live": live,
             "pregame_home_prob": pregame['home_win_prob'],
             "pregame_away_prob": pregame['away_win_prob'],
