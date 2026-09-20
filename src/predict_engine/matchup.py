@@ -16,7 +16,7 @@ def _coach_h2h(df_full, home_coach, away_coach):
     return wins / len(meetings), len(meetings)
 
 
-def build_matchup_features(home_team, away_team, snapshots, home_rest, away_rest, div_game):
+def build_matchup_features(home_team, away_team, snapshots, home_rest, away_rest, div_game, spread_line):
     """Assembles one feature row for a specific upcoming matchup from the snapshot tables."""
     s = snapshots
     row = {}
@@ -85,13 +85,14 @@ def build_matchup_features(home_team, away_team, snapshots, home_rest, away_rest
     row['away_opp_cb_rating_allowed'] = home_cb['recent_def_passer_rating_allowed'].values[0]
 
     row['div_game'] = div_game
+    row['spread_line'] = spread_line
 
     return pd.DataFrame([row])
 
 
-def predict_matchup(home_team, away_team, snapshots, model_bundle, home_rest, away_rest, div_game):
+def predict_matchup(home_team, away_team, snapshots, model_bundle, home_rest, away_rest, div_game, spread_line):
     """Returns home team win probability (float 0-1) for one matchup."""
-    feature_row = build_matchup_features(home_team, away_team, snapshots, home_rest, away_rest, div_game)
+    feature_row = build_matchup_features(home_team, away_team, snapshots, home_rest, away_rest, div_game, spread_line)
     feature_cols = model_bundle['feature_cols']
     X = feature_row[feature_cols]
     X_imputed = pd.DataFrame(model_bundle['imputer'].transform(X), columns=feature_cols)
@@ -108,7 +109,7 @@ DETAIL_COLS = [
     'home_wrte_injury_flag', 'away_wrte_injury_flag',
     'home_star_rb_injured', 'away_star_rb_injured',
     'home_star_wr_injured', 'away_star_wr_injured',
-    'rest_advantage'
+    'rest_advantage', 'spread_line',
 ]
 
 
@@ -123,7 +124,7 @@ def predict_week(season, week, snapshots, model_bundle):
         try:
             feature_row = build_matchup_features(
                 g['home_team'], g['away_team'], snapshots,
-                g['home_rest'], g['away_rest'], g['div_game']
+                g['home_rest'], g['away_rest'], g['div_game'], g['spread_line']
             )
             feature_cols = model_bundle['feature_cols']
             X = feature_row[feature_cols]

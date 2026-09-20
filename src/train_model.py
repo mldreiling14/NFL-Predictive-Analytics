@@ -37,7 +37,8 @@ FEATURE_COLS = [
     'home_opp_cb_rating_allowed', 'away_opp_cb_rating_allowed',
     'home_star_rb_injured', 'away_star_rb_injured',
     'home_star_wr_injured', 'away_star_wr_injured',
-    'div_game'
+    'div_game',
+    'spread_line'
 ]
 
 
