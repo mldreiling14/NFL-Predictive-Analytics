@@ -47,6 +47,7 @@ def safe_load_depth_charts(seasons):
             print(f"Depth charts for {s} failed: {e}")
     raise RuntimeError("Could not load depth charts for any season in range")
 
+
 def safe_load_pfr_advstats(seasons, stat_type):
     """
     Pulls PFR advanced stats season-by-season, skipping any season
@@ -272,7 +273,12 @@ def build_snapshots(db_path="data/nfl.db", seasons=range(2015, 2026)):
     current_wr_starter = wr_depth.loc[wr_depth.groupby('team')['dt'].idxmax()][['team', 'gsis_id']].rename(
         columns={'gsis_id': 'player_id'})
     current_wr_starter = current_wr_starter.merge(crosswalk, on='player_id', how='left')
-    current_primary_wr = current_wr_starter[['team', 'pfr_player_id']].merge(physical, on='pfr_player_id', how='left')
+    current_primary_wr = current_wr_starter[['team', 'player_id', 'pfr_player_id']].merge(physical, on='pfr_player_id', how='left')
+
+    te_depth = depth[(depth['pos_abb'] == 'TE') & (depth['pos_rank'] == 1)].copy()
+    te_depth['dt'] = pd.to_datetime(te_depth['dt'])
+    current_te_starter = te_depth.loc[te_depth.groupby('team')['dt'].idxmax()][['team', 'gsis_id']].rename(
+        columns={'gsis_id': 'player_id'})
 
     cb_depth = depth[(depth['pos_abb'].isin(['CB', 'LCB', 'RCB'])) & (depth['pos_rank'] == 1)].copy()
     cb_depth['dt'] = pd.to_datetime(cb_depth['dt'])
@@ -307,7 +313,8 @@ def build_snapshots(db_path="data/nfl.db", seasons=range(2015, 2026)):
 
     current_qb = current_qb.merge(player_names, on='player_id', how='left')
     current_rb_starter = current_rb_starter.merge(player_names, on='player_id', how='left')
-    current_primary_wr = current_primary_wr.merge(player_names_pfr, on='pfr_player_id', how='left')
+    current_te_starter = current_te_starter.merge(player_names, on='player_id', how='left')
+    current_primary_wr = current_primary_wr.merge(player_names, on='player_id', how='left')
     current_primary_cb = current_primary_cb.merge(player_names_pfr, on='pfr_player_id', how='left')
 
     def_positions = ['DE', 'DT', 'DL', 'NT', 'LB', 'ILB', 'OLB', 'MLB', 'SLB', 'WLB']
@@ -340,6 +347,7 @@ def build_snapshots(db_path="data/nfl.db", seasons=range(2015, 2026)):
         'current_qb': current_qb,
         'current_rb': current_rb,
         'current_rb_starter': current_rb_starter,
+        'current_te_starter': current_te_starter,
         'current_wrte': current_wrte,
         'current_coach': current_coach,
         'current_team_stats': current_team_stats,

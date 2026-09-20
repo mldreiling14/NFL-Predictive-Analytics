@@ -1,6 +1,8 @@
 import pandas as pd
 import nflreadpy as nfl
 
+from .injuries import get_injured_player_ids
+
 
 def _coach_h2h(df_full, home_coach, away_coach):
     meetings = df_full[
@@ -16,7 +18,7 @@ def _coach_h2h(df_full, home_coach, away_coach):
     return wins / len(meetings), len(meetings)
 
 
-def build_matchup_features(home_team, away_team, snapshots, home_rest, away_rest, div_game, spread_line):
+def build_matchup_features(home_team, away_team, snapshots, home_rest, away_rest, div_game, spread_line, injured_ids):
     """Assembles one feature row for a specific upcoming matchup from the snapshot tables."""
     s = snapshots
     row = {}
@@ -43,9 +45,24 @@ def build_matchup_features(home_team, away_team, snapshots, home_rest, away_rest
         row[f'{side}_wrte_recent_rec_epa'] = wrte['recent_t_rec_epa'].values[0]
         row[f'{side}_wrte_recent_targets'] = wrte['recent_t_targets'].values[0]
 
-        row[f'{side}_qb_injury_flag'] = 0
-        row[f'{side}_rb_injury_flag'] = 0
-        row[f'{side}_wrte_injury_flag'] = 0
+        qb_player_id = qb['player_id'].values[0] if len(qb) > 0 else None
+        row[f'{side}_qb_injury_flag'] = int(qb_player_id in injured_ids) if qb_player_id else 0
+
+        rb_starter = s['current_rb_starter'][s['current_rb_starter']['team'] == team]
+        rb_player_id = rb_starter['player_id'].values[0] if len(rb_starter) > 0 else None
+        row[f'{side}_rb_injury_flag'] = int(rb_player_id in injured_ids) if rb_player_id else 0
+
+        wr = s['current_primary_wr'][s['current_primary_wr']['team'] == team]
+        wr_player_id = wr['player_id'].values[0] if len(wr) > 0 else None
+        te = s['current_te_starter'][s['current_te_starter']['team'] == team]
+        te_player_id = te['player_id'].values[0] if len(te) > 0 else None
+        wrte_injured = (bool(wr_player_id) and wr_player_id in injured_ids) or \
+                       (bool(te_player_id) and te_player_id in injured_ids)
+        row[f'{side}_wrte_injury_flag'] = int(wrte_injured)
+
+        # Deferred: needs a league-wide percentile ranking (top 10%/5%
+        # of ALL RBs/WRs that week), not just the two teams in this
+        # matchup - see FEATURES.md discussion.
         row[f'{side}_star_rb_injured'] = 0
         row[f'{side}_star_wr_injured'] = 0
 
@@ -90,9 +107,9 @@ def build_matchup_features(home_team, away_team, snapshots, home_rest, away_rest
     return pd.DataFrame([row])
 
 
-def predict_matchup(home_team, away_team, snapshots, model_bundle, home_rest, away_rest, div_game, spread_line):
+def predict_matchup(home_team, away_team, snapshots, model_bundle, home_rest, away_rest, div_game, spread_line, injured_ids):
     """Returns home team win probability (float 0-1) for one matchup."""
-    feature_row = build_matchup_features(home_team, away_team, snapshots, home_rest, away_rest, div_game, spread_line)
+    feature_row = build_matchup_features(home_team, away_team, snapshots, home_rest, away_rest, div_game, spread_line, injured_ids)
     feature_cols = model_bundle['feature_cols']
     X = feature_row[feature_cols]
     X_imputed = pd.DataFrame(model_bundle['imputer'].transform(X), columns=feature_cols)
@@ -118,13 +135,14 @@ def predict_week(season, week, snapshots, model_bundle):
     including the underlying feature values needed for a detailed game view."""
     sched = nfl.load_schedules(seasons=[season]).to_pandas()
     week_games = sched[sched['week'] == week]
+    injured_ids = get_injured_player_ids(season, week)
 
     results = []
     for _, g in week_games.iterrows():
         try:
             feature_row = build_matchup_features(
                 g['home_team'], g['away_team'], snapshots,
-                g['home_rest'], g['away_rest'], g['div_game'], g['spread_line']
+                g['home_rest'], g['away_rest'], g['div_game'], g['spread_line'], injured_ids
             )
             feature_cols = model_bundle['feature_cols']
             X = feature_row[feature_cols]
