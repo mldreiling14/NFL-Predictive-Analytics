@@ -2,6 +2,7 @@ import pandas as pd
 import sqlite3
 import nflreadpy as nfl
 
+
 def safe_load_depth_charts(seasons):
     """
     Attempts to load the current season's depth chart, falling back
@@ -11,12 +12,36 @@ def safe_load_depth_charts(seasons):
     imperfect but reasonable proxy - most teams' starters don't
     change completely between seasons, and it's far better than
     having no starter information at all.
+
+    nflreadpy returns TWO different shapes depending on the season:
+    - An in-progress/current season returns a live, real-time feed
+      with columns team/pos_abb/pos_rank/dt (dt is a real timestamp,
+      pos_abb includes side-specific labels like LCB/RCB) - this is
+      the ORIGINAL shape the rest of this file is written for, and
+      needs no changes at all.
+    - A completed past season returns an archived weekly file with
+      columns club_code/position/depth_team/season/week instead (no
+      per-update timestamp, and CB has no L/R split) - this is only
+      hit as a fallback, and gets normalized to the same old column
+      names below so the rest of this file doesn't need to change.
     """
     for s in sorted(seasons, reverse=True):
         try:
             df = nfl.load_depth_charts(seasons=[s]).to_pandas()
             if s != max(seasons):
                 print(f"Using {s} depth charts as fallback (current season unavailable)")
+
+            if 'club_code' in df.columns:
+                rename_map = {'club_code': 'team'}
+                if 'position' in df.columns and 'pos_abb' not in df.columns:
+                    rename_map['position'] = 'pos_abb'
+                if 'depth_team' in df.columns and 'pos_rank' not in df.columns:
+                    rename_map['depth_team'] = 'pos_rank'
+                df = df.rename(columns=rename_map)
+                df['pos_rank'] = pd.to_numeric(df['pos_rank'], errors='coerce')
+                if 'dt' not in df.columns:
+                    df['dt'] = df['week']
+
             return df
         except Exception as e:
             print(f"Depth charts for {s} failed: {e}")
@@ -40,7 +65,8 @@ def safe_load_pfr_advstats(seasons, stat_type):
     if frames:
         return pd.concat(frames, ignore_index=True)
     return pd.DataFrame()
-    
+
+
 def build_snapshots(db_path="data/nfl.db", seasons=range(2015, 2026)):
     """
     Builds every 'current state' table needed for live predictions:
@@ -248,7 +274,7 @@ def build_snapshots(db_path="data/nfl.db", seasons=range(2015, 2026)):
     current_wr_starter = current_wr_starter.merge(crosswalk, on='player_id', how='left')
     current_primary_wr = current_wr_starter[['team', 'pfr_player_id']].merge(physical, on='pfr_player_id', how='left')
 
-    cb_depth = depth[(depth['pos_abb'].isin(['LCB', 'RCB'])) & (depth['pos_rank'] == 1)].copy()
+    cb_depth = depth[(depth['pos_abb'].isin(['CB', 'LCB', 'RCB'])) & (depth['pos_rank'] == 1)].copy()
     cb_depth['dt'] = pd.to_datetime(cb_depth['dt'])
     current_cb_starters = cb_depth.loc[cb_depth.groupby(['team', 'pos_abb'])['dt'].idxmax()][
         ['team', 'gsis_id', 'pos_abb']].rename(columns={'gsis_id': 'player_id'})
