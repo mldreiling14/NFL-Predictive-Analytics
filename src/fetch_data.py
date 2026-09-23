@@ -2,6 +2,8 @@ import nflreadpy as nfl
 import pandas as pd
 import sqlite3
 
+from config import SEASONS
+
 def fetch_and_save_schedules(seasons, db_path="data/nfl.db"):
     df = nfl.load_schedules(seasons=seasons)
     df = df.to_pandas()
@@ -15,4 +17,4 @@ def fetch_and_save_schedules(seasons, db_path="data/nfl.db"):
     print(f"Saved {len(df)} games to {db_path}")
 
 if __name__ == "__main__":
-    fetch_and_save_schedules(seasons=list(range(2015, 2026)))
+    fetch_and_save_schedules(seasons=SEASONS)

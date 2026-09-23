@@ -2,6 +2,7 @@ import pandas as pd
 import sqlite3
 import nflreadpy as nfl
 
+from config import SEASONS
 from features import (
     add_recent_form_features,
     add_qb_features,
@@ -19,8 +20,7 @@ from features import (
     add_star_wr_injury_feature
 )
 
-
-def build_all_features(seasons=range(2015, 2026), db_path="data/nfl.db"):
+def build_all_features(seasons=SEASONS, db_path="data/nfl.db"):
     # Load games
     conn = sqlite3.connect(db_path)
     df_full = pd.read_sql_query("SELECT * FROM games", conn)

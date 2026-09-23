@@ -1,6 +1,7 @@
 import pandas as pd
 import sqlite3
 import nflreadpy as nfl
+from config import SEASONS
 
 
 def safe_load_depth_charts(seasons):
@@ -68,7 +69,7 @@ def safe_load_pfr_advstats(seasons, stat_type):
     return pd.DataFrame()
 
 
-def build_snapshots(db_path="data/nfl.db", seasons=range(2015, 2026)):
+def build_snapshots(db_path="data/nfl.db", seasons=SEASONS):
     """
     Builds every 'current state' table needed for live predictions:
     each team's current form, offense/defense ratings, QB/RB/WR-TE
