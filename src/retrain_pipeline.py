@@ -114,12 +114,45 @@ def evaluate_bundle(bundle, test_df):
     probs = bundle["model"].predict_proba(X_imputed)[:, 1]
     preds = (probs >= 0.5).astype(int)
 
-    return {
+    metrics = {
         "n_games": len(test_df),
         "accuracy": accuracy_score(y, preds),
         "log_loss": log_loss(y, probs, labels=[0, 1]),
         "brier": brier_score_loss(y, probs),
     }
+    # Kept alongside the aggregate metrics so a report can show which
+    # specific games were right or wrong, not just the overall score -
+    # indexed by game_id so run_evaluate() can line up production and
+    # candidate predictions on the same game.
+    per_game = {
+        game_id: {"predicted_prob": float(p), "correct": bool(pred == actual)}
+        for game_id, p, pred, actual in zip(test_df["game_id"], probs, preds, y)
+    }
+    return metrics, per_game
+
+
+def build_game_details(test_df, current_per_game, candidate_per_game):
+    """One row per held-out game, with both models' predictions side by
+    side against the actual result - this is the part a report file
+    doesn't otherwise show, and what makes it possible to eyeball which
+    specific games either model got wrong."""
+    rows = []
+    for _, g in test_df.iterrows():
+        row = {
+            "game_id": g["game_id"],
+            "away_team": g["away_team"],
+            "home_team": g["home_team"],
+            "home_win": int(g["home_win"]),
+        }
+        if current_per_game is not None:
+            cur = current_per_game[g["game_id"]]
+            row["current_pred_prob"] = cur["predicted_prob"]
+            row["current_correct"] = cur["correct"]
+        cand = candidate_per_game[g["game_id"]]
+        row["candidate_pred_prob"] = cand["predicted_prob"]
+        row["candidate_correct"] = cand["correct"]
+        rows.append(row)
+    return rows
 
 
 def format_metrics(label, m):
@@ -150,17 +183,25 @@ def run_evaluate():
 
     if not os.path.exists(MODEL_PATH):
         print(f"No existing production model found at {MODEL_PATH} - nothing to compare against.")
-        current_metrics = None
+        current_metrics, current_per_game = None, None
     else:
         current_bundle = joblib.load(MODEL_PATH)
-        current_metrics = evaluate_bundle(current_bundle, test_df)
+        current_metrics, current_per_game = evaluate_bundle(current_bundle, test_df)
 
-    candidate_metrics = evaluate_bundle(candidate_bundle, test_df)
+    candidate_metrics, candidate_per_game = evaluate_bundle(candidate_bundle, test_df)
+    game_details = build_game_details(test_df, current_per_game, candidate_per_game)
 
     print()
     if current_metrics:
         print(format_metrics("Current production model", current_metrics))
     print(format_metrics("Candidate (retrained) model", candidate_metrics))
+    print()
+    for row in game_details:
+        marker = "correct" if row["candidate_correct"] else "WRONG"
+        print(
+            f"  {row['away_team']:>3} @ {row['home_team']:<3}  "
+            f"home_win={row['home_win']}  candidate_prob={row['candidate_pred_prob']:.3f}  [{marker}]"
+        )
 
     os.makedirs(os.path.dirname(CANDIDATE_MODEL_PATH), exist_ok=True)
     joblib.dump(candidate_bundle, CANDIDATE_MODEL_PATH)
@@ -177,6 +218,7 @@ def run_evaluate():
                 "n_train_games": len(train_df),
                 "current_production_model": current_metrics,
                 "candidate_model": candidate_metrics,
+                "games": game_details,
             },
             f,
             indent=2,
