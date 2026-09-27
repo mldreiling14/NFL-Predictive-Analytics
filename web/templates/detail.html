@@ -7,17 +7,56 @@
 
 <div class="card" data-game-id="{{ game.game_id }}" data-week="{{ week }}"
      data-live="{{ 'true' if live.state == 'in' else 'false' }}">
+    <div class="status-line" style="text-align:center; margin-bottom:14px;">
+        {% if live.state == 'in' %}
+        <span class="badge-live">● LIVE</span>
+        <span class="quarter-clock" style="color:var(--text-secondary); font-size:13px; margin-left:8px;">Q{{ live.quarter }} · {{ live.clock }}</span>
+        {% elif live.state == 'post' %}
+        <span style="color:var(--text-muted); font-size:12px; font-weight:700; letter-spacing:0.5px;">FINAL</span>
+        {% else %}
+        <span style="color:var(--text-muted); font-size:12px;">Kickoff not yet started</span>
+        {% endif %}
+    </div>
+
+    {% set has_score = live.state in ['in', 'post'] and live.away_score is not none and live.home_score is not none %}
+    {% set away_trailing = has_score and live.away_score < live.home_score %}
+    {% set home_trailing = has_score and live.home_score < live.away_score %}
+
     <div class="game-row">
-        <div style="text-align:center;">
-            <img class="team-logo" style="width:48px; height:48px;" src="{{ team_logos.get(game.away_team, '') }}"><br>
-            <strong class="away-pct" style="font-size:22px;">{{ "%.0f"|format(display_away_prob * 100) }}%</strong>
+        <div style="text-align:center; flex:1;">
+            <img class="team-logo" style="width:56px; height:56px;" src="{{ team_logos.get(game.away_team, '') }}"><br>
+            <span class="team-name away-team-name {{ 'trailing' if away_trailing else '' }}" style="font-size:16px;">{{ game.away_team }}</span>
+            {% if live.state in ['in', 'post'] %}
+            <div class="away-score" style="font-size:32px; font-weight:700; font-family:var(--font-mono);">{{ live.away_score }}</div>
+            {% endif %}
         </div>
-        <div style="text-align:center;">
-            <img class="team-logo" style="width:48px; height:48px;" src="{{ team_logos.get(game.home_team, '') }}"><br>
-            <strong class="home-pct" style="font-size:22px;">{{ "%.0f"|format(display_home_prob * 100) }}%</strong>
+        <div style="text-align:center; padding:0 12px; min-width:90px;">
+            {% if live.state == 'in' and live.down_distance %}
+            <div class="down-distance-inline" style="color:var(--text-secondary); font-size:13px;">{{ live.down_distance }}</div>
+            {% if live.possession_team %}
+            <div class="possession-inline" style="color:var(--text-muted); font-size:12px; margin-top:2px;">🏈 {{ live.possession_team }}</div>
+            {% endif %}
+            {% else %}
+            <span style="color:var(--text-muted);">@</span>
+            {% endif %}
+        </div>
+        <div style="text-align:center; flex:1;">
+            <img class="team-logo" style="width:56px; height:56px;" src="{{ team_logos.get(game.home_team, '') }}"><br>
+            <span class="team-name home-team-name {{ 'trailing' if home_trailing else '' }}" style="font-size:16px;">{{ game.home_team }}</span>
+            {% if live.state in ['in', 'post'] %}
+            <div class="home-score" style="font-size:32px; font-weight:700; font-family:var(--font-mono);">{{ live.home_score }}</div>
+            {% endif %}
         </div>
     </div>
-    <div style="display:flex; width:100%; height:20px; border-radius:6px; overflow:hidden; margin-top:12px;">
+</div>
+
+<div class="card">
+    <div class="panel-title">Win Probability</div>
+    <div class="game-row" style="margin-bottom:6px;">
+        <strong class="away-pct" style="font-size:24px;">{{ "%.0f"|format(display_away_prob * 100) }}%</strong>
+        <strong class="home-pct" style="font-size:24px;">{{ "%.0f"|format(display_home_prob * 100) }}%</strong>
+    </div>
+    <div style="display:flex; width:100%; height:14px; border-radius:6px; overflow:hidden;">
         <div class="away-bar" style="width:{{ display_away_prob * 100 }}%; background:{{ away_color }}; border-right:2px solid var(--surface-1);"></div>
         <div class="home-bar" style="width:{{ display_home_prob * 100 }}%; background:{{ home_color }};"></div>
     </div>
@@ -26,50 +65,55 @@
     </p>
 </div>
 
-{% if live.available %}
-<div class="card" style="border-color:#ff4b4b;">
-    <span style="color:#ff4b4b; font-weight:600; font-size:13px;">🔴 LIVE — Q{{ live.quarter }} {{ live.clock }}</span>
-    <div style="font-size:28px; font-weight:600; margin:6px 0;">
-        {{ game.away_team }} {{ live.away_score }} — {{ live.home_score }} {{ game.home_team }}
-    </div>
-    {% if live.possession_team %}
-    <p style="margin:0; color:var(--text-secondary);">
-        🏈 {{ live.possession_team }} ball{% if live.down_distance %} · {{ live.down_distance }}{% endif %}
-    </p>
-    {% endif %}
-</div>
-{% elif live.state == 'post' %}
+{% if live.state == 'in' %}
 <div class="card">
-    <p style="color:var(--text-muted); margin:0 0 4px;">Final Score</p>
-    <div style="font-size:22px; font-weight:600;">
-        {{ game.away_team }} {{ live.away_score }} — {{ live.home_score }} {{ game.home_team }}
-    </div>
+    <div class="panel-title">Game State</div>
+    <div class="stat-row"><span class="stat-label">Possession</span><span class="stat-value possession-value">{{ live.possession_team or '—' }}</span></div>
+    <div class="stat-row"><span class="stat-label">Down &amp; Distance</span><span class="stat-value down-distance-value">{{ live.down_distance or '—' }}</span></div>
+    <div class="stat-row"><span class="stat-label">Quarter</span><span class="stat-value quarter-value">{{ live.quarter }}</span></div>
+    <div class="stat-row"><span class="stat-label">Clock</span><span class="stat-value clock-value">{{ live.clock }}</span></div>
 </div>
-{% elif live.state == 'pre' %}
-<p style="color:var(--text-muted);">Game hasn't started yet — check back at kickoff for live tracking.</p>
 {% endif %}
 
-<h3>🔑 Key Players</h3>
-{% for team in [game.away_team, game.home_team] %}
-<p><strong>{{ team }}</strong>: QB {{ key_players[team].qb }} · RB1 {{ key_players[team].rb }} · WR1 {{ key_players[team].wr }}</p>
-{% endfor %}
+<div class="team-columns" style="margin-bottom:8px;">
+    {% for team in [game.away_team, game.home_team] %}
+    <div class="card">
+        <div class="panel-title">{{ team }}</div>
+        <div class="stat-row">
+            <span class="stat-label">QB</span>
+            <span class="stat-value">{{ key_players[team].qb }}{% if key_players[team].qb_yards %} · {{ key_players[team].qb_yards }} yd/g{% endif %}</span>
+        </div>
+        <div class="stat-row">
+            <span class="stat-label">RB1</span>
+            <span class="stat-value">{{ key_players[team].rb }}{% if key_players[team].rb_yards %} · {{ key_players[team].rb_yards }} yd/g{% endif %}</span>
+        </div>
+        <div class="stat-row">
+            <span class="stat-label">WR1</span>
+            <span class="stat-value">{{ key_players[team].wr }}{% if key_players[team].wr_yards %} · {{ key_players[team].wr_yards }} yd/g{% endif %}</span>
+        </div>
+    </div>
+    {% endfor %}
+</div>
 
-<h3>🏥 Injury Report</h3>
-<p style="color:var(--text-muted); font-size:12px; margin-top:-4px; margin-bottom:10px;">
+<p style="color:var(--text-muted); font-size:12px; margin-bottom:4px;">
     Injury data as of {{ injury_fetched_at }}
 </p>
-{% for team in [game.away_team, game.home_team] %}
-<p><strong>{{ team }}</strong></p>
-{% if injuries[team] is none %}
-<p style="color:var(--text-muted);">Injury reports not yet published.</p>
-{% elif injuries[team]|length == 0 %}
-<p style="color:var(--text-muted);">No injury designations reported.</p>
-{% else %}
-{% for entry in injuries[team] %}
-<p style="color:var(--text-secondary);">{{ entry.full_name }} ({{ entry.position }}) — {{ entry.report_status }}</p>
-{% endfor %}
-{% endif %}
-{% endfor %}
+<div class="team-columns">
+    {% for team in [game.away_team, game.home_team] %}
+    <div class="card">
+        <div class="panel-title">{{ team }}</div>
+        {% if injuries[team] is none %}
+        <span class="injury-none">Not yet published</span>
+        {% elif injuries[team]|length == 0 %}
+        <span class="injury-none">None reported</span>
+        {% else %}
+        {% for entry in injuries[team] %}
+        <span class="injury-entry">{{ entry.full_name }} ({{ entry.position }}) — {{ entry.report_status }}</span>
+        {% endfor %}
+        {% endif %}
+    </div>
+    {% endfor %}
+</div>
 {% endblock %}
 
 <script>
@@ -80,17 +124,49 @@ function pollDetailLive(gameId, week) {
             const card = document.querySelector(`[data-game-id="${gameId}"]`);
             if (!card) return;
 
+            if (data.home_score !== null) {
+                card.querySelector('.away-score').textContent = data.away_score;
+                card.querySelector('.home-score').textContent = data.home_score;
+
+                const awayName = card.querySelector('.away-team-name');
+                const homeName = card.querySelector('.home-team-name');
+                awayName.classList.toggle('trailing', data.away_score < data.home_score);
+                homeName.classList.toggle('trailing', data.home_score < data.away_score);
+            }
+
             const awayPct = data.away_win_prob * 100;
             const homePct = data.home_win_prob * 100;
-            card.querySelector('.away-pct').textContent = Math.round(awayPct) + '%';
-            card.querySelector('.home-pct').textContent = Math.round(homePct) + '%';
-            card.querySelector('.away-bar').style.width = awayPct + '%';
-            card.querySelector('.home-bar').style.width = homePct + '%';
+            document.querySelector('.away-pct').textContent = Math.round(awayPct) + '%';
+            document.querySelector('.home-pct').textContent = Math.round(homePct) + '%';
+            document.querySelector('.away-bar').style.width = awayPct + '%';
+            document.querySelector('.home-bar').style.width = homePct + '%';
+
+            const quarterClock = card.querySelector('.quarter-clock');
+            if (quarterClock && data.quarter !== null) {
+                quarterClock.textContent = `Q${data.quarter} · ${data.clock}`;
+            }
+            const downDistInline = card.querySelector('.down-distance-inline');
+            if (downDistInline && data.down_distance) {
+                downDistInline.textContent = data.down_distance;
+            }
+            const possessionInline = card.querySelector('.possession-inline');
+            if (possessionInline && data.possession_team) {
+                possessionInline.textContent = `🏈 ${data.possession_team}`;
+            }
+
+            const possessionValue = document.querySelector('.possession-value');
+            if (possessionValue) possessionValue.textContent = data.possession_team || '—';
+            const downDistValue = document.querySelector('.down-distance-value');
+            if (downDistValue) downDistValue.textContent = data.down_distance || '—';
+            const quarterValue = document.querySelector('.quarter-value');
+            if (quarterValue) quarterValue.textContent = data.quarter;
+            const clockValue = document.querySelector('.clock-value');
+            if (clockValue) clockValue.textContent = data.clock;
 
             if (data.state === 'in') {
                 setTimeout(() => pollDetailLive(gameId, week), 15000);
             }
-            // state === 'post' - leave the bar at its final 100/0 and stop polling
+            // state === 'post' - leave everything at its final value and stop polling
         })
         .catch(err => console.error('Live poll failed', err));
 }

@@ -192,6 +192,8 @@ def live_probability(game_id: str, week: int):
         "away_score": live.get('away_score') if live else None,
         "quarter": live.get('quarter') if live else None,
         "clock": live.get('clock') if live else None,
+        "possession_team": live.get('possession_team') if live else None,
+        "down_distance": live.get('down_distance') if live else None,
         "home_win_prob": home_prob,
         "away_win_prob": 1 - home_prob,
     }
@@ -210,13 +212,21 @@ def game_detail(request: Request, game_id: str, week: int):
     pregame = get_pregame_prediction(game_id, game)
 
     qb_name = safe_name(snapshots['current_qb'], 'team')
+    qb_yards = safe_stat(snapshots['current_qb'], 'team', 'recent_passing_yards')
     rb_name = safe_name(snapshots['current_rb_starter'], 'team')
+    rb_yards = safe_stat(snapshots['current_rb'], 'team', 'recent_t_rush_yards')
     wr_name = safe_name(snapshots['current_primary_wr'], 'team')
+    wr_yards = safe_stat(snapshots['current_wrte'], 'team', 'recent_t_rec_yards')
 
     key_players = {
-        team: {"qb": qb_name(team), "rb": rb_name(team), "wr": wr_name(team)}
-        for team in [game['home_team'], game['away_team']]
+    team: {
+        "qb": qb_name(team), "qb_yards": qb_yards(team),
+        "rb": rb_name(team), "rb_yards": rb_yards(team),
+        "wr": wr_name(team), "wr_yards": wr_yards(team),
     }
+    for team in [game['home_team'], game['away_team']]
+}
+
 
     injuries = {}
     injury_fetched_at = None
@@ -251,3 +261,11 @@ def game_detail(request: Request, game_id: str, week: int):
             "display_away_prob": 1 - home_prob,
         }
     )
+
+def safe_stat(table, team_col, stat_col):
+    def lookup(team):
+        row = table[table[team_col] == team]
+        if len(row) == 0 or pd.isna(row[stat_col].values[0]):
+            return None
+        return round(row[stat_col].values[0], 1)
+    return lookup
