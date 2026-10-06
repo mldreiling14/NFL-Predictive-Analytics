@@ -14,13 +14,16 @@ from fastapi.templating import Jinja2Templates
 sys.path.append(os.path.join(os.path.dirname(os.path.abspath(__file__)), '..', 'src'))
 
 from predict_engine import (
-    load_model, build_snapshots, predict_week,
+    load_model, predict_week,
     get_injury_report, get_live_game_data, get_live_win_probability,
     log_predictions, get_logged_prediction_for_game,
 )
 
+from predict_engine.snapshot_cache import load_or_build_snapshots
+
 DB_PATH = os.path.join(os.path.dirname(__file__), "..", "data", "nfl.db")
 
+SNAPSHOTS_DIR = os.path.join(os.path.dirname(__file__), "..", "data", "snapshots")
 
 # --- Color helpers -----------------------------------------------------
 
@@ -64,7 +67,10 @@ templates = Jinja2Templates(directory=os.path.join(os.path.dirname(__file__), "t
 
 # Loaded once at startup - a real refresh strategy comes later
 model_bundle = load_model(model_path=os.path.join(os.path.dirname(__file__), "..", "models", "win_probability_model.joblib"))
-snapshots = build_snapshots(db_path=DB_PATH, seasons=range(2024, 2027))
+
+# Reads the pre-built cache in data/snapshots/ (fast, low memory). Falls back to
+# building live if it's missing. Refresh with: python scripts/build_snapshots_cache.py
+snapshots = load_or_build_snapshots(DB_PATH, SNAPSHOTS_DIR)
 
 teams_df = nfl.load_teams().to_pandas()
 team_logos = dict(zip(teams_df['team_abbr'], teams_df['team_logo_espn']))
@@ -72,10 +78,29 @@ team_colors = dict(zip(teams_df['team_abbr'], teams_df['team_color']))
 team_colors2 = dict(zip(teams_df['team_abbr'], teams_df['team_color2']))
 
 
+# The week list only changes when games finish, but this used to download the
+# schedule on EVERY home-page request. Cache it; if a refresh fails, keep
+# serving the last good value rather than erroring the page.
+_weeks_cache = None   # (fetched_at, weeks)
+WEEKS_CACHE_TTL_SECONDS = 60 * 60
+
+
 def get_available_weeks():
-    sched = nfl.load_schedules(seasons=[2026]).to_pandas()
+    global _weeks_cache
+    now = time.time()
+    if _weeks_cache and (now - _weeks_cache[0]) < WEEKS_CACHE_TTL_SECONDS:
+        return _weeks_cache[1]
+    try:
+        sched = nfl.load_schedules(seasons=[2026]).to_pandas()
+    except Exception as e:
+        if _weeks_cache:
+            print(f"Schedule refresh failed, serving cached week list: {e}")
+            return _weeks_cache[1]
+        raise
     upcoming = sched[sched['home_score'].isna()]
-    return sorted(upcoming['week'].unique().tolist())
+    weeks = sorted(upcoming['week'].unique().tolist())
+    _weeks_cache = (now, weeks)
+    return weeks
 
 
 # --- Caching ---------------------------------------------------------------

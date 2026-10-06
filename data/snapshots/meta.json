@@ -1,0 +1,25 @@
+{
+  "built_at": 1791300695.1079443,
+  "seasons": [
+    2024,
+    2025,
+    2026
+  ],
+  "tables": [
+    "current_coach",
+    "current_form",
+    "current_off_def",
+    "current_pass_rusher",
+    "current_pressure",
+    "current_primary_cb",
+    "current_primary_wr",
+    "current_qb",
+    "current_rb",
+    "current_rb_starter",
+    "current_te_starter",
+    "current_team_stats",
+    "current_wrte",
+    "df_full",
+    "qb_stats_raw"
+  ]
+}
