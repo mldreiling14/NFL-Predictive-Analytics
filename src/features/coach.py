@@ -53,6 +53,7 @@ def add_coach_features(df_full, window=5):
         for i in range(len(group)):
             row = group.iloc[i]
             prior = group.iloc[:i]
+            prior = prior[prior['home_win'].notna()]
             if len(prior) == 0:
                 results.append({'game_id': row['game_id'], 'home_coach_h2h_wins': None, 'h2h_games_played': 0})
                 continue

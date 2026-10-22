@@ -27,7 +27,7 @@ def add_home_win_label(df):
     comparison silently turns every unplayed game into a home loss.
     """
     df = df.copy()
-    df['home_win'] = (df['home_score'] > df['away_score']).astype(float).where(df['home_score'].notna())
+    df['home_win'] = (df['home_score'] > df['away_score']).astype(float).where(df['home_score'].notna() & df['away_score'].notna())
     return df
 
 

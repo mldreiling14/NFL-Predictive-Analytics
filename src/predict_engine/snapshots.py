@@ -4,6 +4,7 @@ import nflreadpy as nfl
 import polars as pl
 from config import SEASONS
 from features.common import completed_games
+from features.elo import run_off_def_ratings
 
 
 def safe_load_depth_charts(seasons):
@@ -154,33 +155,15 @@ def build_snapshots(db_path="data/nfl.db", seasons=SEASONS):
     elo_games = df_full[['game_id', 'season', 'gameday', 'home_team_std', 'away_team_std',
                           'home_score', 'away_score']].copy()
     elo_games = elo_games.sort_values(['season', 'gameday']).reset_index(drop=True)
-    all_teams = set(elo_games['home_team_std']).union(set(elo_games['away_team_std']))
-    league_avg_points = elo_games[['home_score', 'away_score']].values.mean()
+    revert_fraction = 1/3
+    _, off_rating, def_rating, last_season = run_off_def_ratings(elo_games, revert_fraction=revert_fraction)
 
-    off_rating = {team: 0.0 for team in all_teams}
-    def_rating = {team: 0.0 for team in all_teams}
-    k_off_def, revert_fraction = 0.05, 1/3
-    current_season = None
-
-    for _, row in elo_games.iterrows():
-        if current_season is not None and row['season'] != current_season:
-            for team in off_rating:
-                off_rating[team] *= (1 - revert_fraction)
-                def_rating[team] *= (1 - revert_fraction)
-        current_season = row['season']
-
-        h, a = row['home_team_std'], row['away_team_std']
-        expected_home_score = league_avg_points + off_rating[h] - def_rating[a]
-        expected_away_score = league_avg_points + off_rating[a] - def_rating[h]
-
-        off_rating[h] += k_off_def * (row['home_score'] - expected_home_score)
-        def_rating[a] -= k_off_def * (row['home_score'] - expected_home_score)
-        off_rating[a] += k_off_def * (row['away_score'] - expected_away_score)
-        def_rating[h] -= k_off_def * (row['away_score'] - expected_away_score)
-
-    for team in off_rating:
-        off_rating[team] *= (1 - revert_fraction)
-        def_rating[team] *= (1 - revert_fraction)
+    # Pull toward average only when the next game starts a new season, the
+    # same rule training applies - mid-season the ratings carry over as-is
+    if max(seasons) != last_season:
+        for team in off_rating:
+            off_rating[team] *= (1 - revert_fraction)
+            def_rating[team] *= (1 - revert_fraction)
 
     current_off_def = pd.DataFrame({
         'team': list(off_rating.keys()),

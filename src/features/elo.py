@@ -27,6 +27,32 @@ def add_elo_features(df_full, k_off_def=0.05, revert_fraction=1/3):
                       'home_score', 'away_score']].copy()
     games = games.sort_values(['season', 'gameday']).reset_index(drop=True)
 
+    pre, _, _, _ = run_off_def_ratings(games, k_off_def, revert_fraction)
+    for col, values in pre.items():
+        games[col] = values
+
+    elo_merge = games[['game_id', 'home_off_rating_pre', 'home_def_rating_pre',
+                        'away_off_rating_pre', 'away_def_rating_pre']]
+    df_full = df_full.drop(columns=['home_elo_pre', 'away_elo_pre', 'home_off_rating_pre',
+                                     'home_def_rating_pre', 'away_off_rating_pre', 'away_def_rating_pre'],
+                            errors='ignore')
+    df_full = df_full.merge(elo_merge, on='game_id', how='left')
+
+    return df_full
+
+
+def run_off_def_ratings(games, k_off_def=0.05, revert_fraction=1/3):
+    """
+    Runs the offense/defense rating updates over games (sorted by season,
+    gameday; columns season, home_team_std, away_team_std, home_score,
+    away_score). Shared by training (add_elo_features) and the live
+    snapshot, so the two can't drift apart.
+
+    Returns (pre-game ratings per row as a dict of lists, final offense
+    ratings, final defense ratings, season of the last game). The final
+    ratings have NOT had the between-season pull toward average applied
+    after the last game - callers predicting into a new season do that.
+    """
     all_teams = set(games['home_team_std']).union(set(games['away_team_std']))
     # stack() drops NaN - unplayed games have no scores, and a single NaN
     # here would make every rating NaN
@@ -65,16 +91,10 @@ def add_elo_features(df_full, k_off_def=0.05, revert_fraction=1/3):
         off_rating[a] += k_off_def * (row['away_score'] - expected_away_score)
         def_rating[h] -= k_off_def * (row['away_score'] - expected_away_score)
 
-    games['home_off_rating_pre'] = home_off_pre
-    games['home_def_rating_pre'] = home_def_pre
-    games['away_off_rating_pre'] = away_off_pre
-    games['away_def_rating_pre'] = away_def_pre
-
-    elo_merge = games[['game_id', 'home_off_rating_pre', 'home_def_rating_pre',
-                        'away_off_rating_pre', 'away_def_rating_pre']]
-    df_full = df_full.drop(columns=['home_elo_pre', 'away_elo_pre', 'home_off_rating_pre',
-                                     'home_def_rating_pre', 'away_off_rating_pre', 'away_def_rating_pre'],
-                            errors='ignore')
-    df_full = df_full.merge(elo_merge, on='game_id', how='left')
-
-    return df_full
+    pre = {
+        'home_off_rating_pre': home_off_pre,
+        'home_def_rating_pre': home_def_pre,
+        'away_off_rating_pre': away_off_pre,
+        'away_def_rating_pre': away_def_pre,
+    }
+    return pre, off_rating, def_rating, current_season
