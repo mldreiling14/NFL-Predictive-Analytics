@@ -6,6 +6,8 @@ from sklearn.preprocessing import StandardScaler
 from sklearn.pipeline import make_pipeline
 from sklearn.impute import SimpleImputer
 
+from features.common import completed_games
+
 FEATURE_COLS = [
     'home_recent_form', 'away_recent_form',
     'home_recent_point_diff', 'away_recent_point_diff',
@@ -42,16 +44,17 @@ FEATURE_COLS = [
 ]
 
 
-def train_and_save_model(db_path="data/nfl.db", model_path="models/win_probability_model.joblib"):
+def load_completed_games(db_path="data/nfl.db"):
+    """games_with_features, restricted to games that have been played.
+    Unplayed games have NaN scores and must never be trained or scored on."""
     conn = sqlite3.connect(db_path)
     df_full = pd.read_sql_query("SELECT * FROM games_with_features", conn)
     conn.close()
+    return completed_games(df_full)
 
-    # Unplayed games have NaN scores, which would otherwise be labeled as
-    # home losses - only train on completed games
-    df_full = df_full.dropna(subset=['home_score', 'away_score'])
 
-    df_full['home_win'] = (df_full['home_score'] > df_full['away_score']).astype(int)
+def train_and_save_model(db_path="data/nfl.db", model_path="models/win_probability_model.joblib"):
+    df_full = load_completed_games(db_path)
 
     X = df_full[FEATURE_COLS].copy()
     y = df_full['home_win']

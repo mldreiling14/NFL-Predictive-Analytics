@@ -3,12 +3,13 @@ import pandas as pd
 import sqlite3
 
 from config import SEASONS
+from features.common import add_home_win_label
 
 def fetch_and_save_schedules(seasons, db_path="data/nfl.db"):
     df = nfl.load_schedules(seasons=seasons)
     df = df.to_pandas()
 
-    df['home_win'] = (df['home_score'] > df['away_score']).astype(int)
+    df = add_home_win_label(df)
 
     conn = sqlite3.connect(db_path)
     df.to_sql("games", conn, if_exists="replace", index=False)

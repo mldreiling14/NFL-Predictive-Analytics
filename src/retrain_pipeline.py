@@ -41,7 +41,6 @@ from datetime import datetime
 
 import joblib
 import pandas as pd
-import sqlite3
 from sklearn.linear_model import LogisticRegression
 from sklearn.preprocessing import StandardScaler
 from sklearn.pipeline import make_pipeline
@@ -49,7 +48,7 @@ from sklearn.impute import SimpleImputer
 from sklearn.metrics import accuracy_score, log_loss, brier_score_loss
 
 sys.path.append(os.path.dirname(os.path.abspath(__file__)))
-from train_model import FEATURE_COLS, train_and_save_model  # noqa: E402
+from train_model import FEATURE_COLS, load_completed_games, train_and_save_model  # noqa: E402
 
 REPO_ROOT = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..")
 DB_PATH = os.path.join(REPO_ROOT, "data", "nfl.db")
@@ -69,25 +68,22 @@ def refresh_data():
 
 
 def load_games():
-    conn = sqlite3.connect(DB_PATH)
-    df_full = pd.read_sql_query("SELECT * FROM games_with_features", conn)
-    conn.close()
-    df_full["home_win"] = (df_full["home_score"] > df_full["away_score"]).astype(int)
-    return df_full
+    # Completed games only - an unplayed game in the held-out week (e.g. a
+    # mid-week run after Thursday night) would otherwise count as a home loss
+    return load_completed_games(DB_PATH)
 
 
 def split_most_recent_week(df_full):
     """Test set = the single most recently completed (season, week).
     Train set = everything strictly before it. Ties season/week together
     so this is correct across a season boundary too."""
-    completed = df_full.dropna(subset=["home_score"])
-    latest_season, latest_week = completed[["season", "week"]].sort_values(
+    latest_season, latest_week = df_full[["season", "week"]].sort_values(
         ["season", "week"]
     ).iloc[-1]
 
     test_mask = (df_full["season"] == latest_season) & (df_full["week"] == latest_week)
     test_df = df_full[test_mask]
-    train_df = df_full[~test_mask & df_full["home_score"].notna()]
+    train_df = df_full[~test_mask]
     return train_df, test_df, int(latest_season), int(latest_week)
 
 

@@ -3,6 +3,7 @@ import sqlite3
 import nflreadpy as nfl
 import polars as pl
 from config import SEASONS
+from features.common import completed_games
 
 
 def safe_load_depth_charts(seasons):
@@ -100,7 +101,10 @@ def build_snapshots(db_path="data/nfl.db", seasons=SEASONS):
         "home_score, away_score, home_coach, away_coach, div_game FROM games_with_features", conn
     )
     conn.close()
-    df_full['home_win'] = (df_full['home_score'] > df_full['away_score']).astype(int)
+    # The table includes the rest of the season's schedule. Unplayed games
+    # have no result, and left in they'd be read as each team's "last 5"
+    # games and turn the off/def ratings into NaN.
+    df_full = completed_games(df_full)
     game_dates = df_full[['game_id', 'gameday']].drop_duplicates()
 
     # The local database may not yet include the current season's real games

@@ -1,3 +1,5 @@
+import pandas as pd
+
 from .common import standardize_team_codes
 
 
@@ -26,7 +28,9 @@ def add_elo_features(df_full, k_off_def=0.05, revert_fraction=1/3):
     games = games.sort_values(['season', 'gameday']).reset_index(drop=True)
 
     all_teams = set(games['home_team_std']).union(set(games['away_team_std']))
-    league_avg_points = games[['home_score', 'away_score']].values.mean()
+    # stack() drops NaN - unplayed games have no scores, and a single NaN
+    # here would make every rating NaN
+    league_avg_points = games[['home_score', 'away_score']].stack().mean()
 
     off_rating = {team: 0.0 for team in all_teams}
     def_rating = {team: 0.0 for team in all_teams}
@@ -46,6 +50,11 @@ def add_elo_features(df_full, k_off_def=0.05, revert_fraction=1/3):
         home_def_pre.append(def_rating[h])
         away_off_pre.append(off_rating[a])
         away_def_pre.append(def_rating[a])
+
+        # Unplayed game: it still gets pre-game ratings above, but has no
+        # result to update them with
+        if pd.isna(row['home_score']) or pd.isna(row['away_score']):
+            continue
 
         expected_home_score = league_avg_points + off_rating[h] - def_rating[a]
         expected_away_score = league_avg_points + off_rating[a] - def_rating[h]
