@@ -40,10 +40,20 @@ Source data comes from [`nflreadpy`](https://github.com/nflverse/nflreadpy), cov
 | + DB/WR size & coverage matchup | 2024–2025 | 68.4%* | 68.9% |
 | + Star RB/WR injury (after bug fix) | 2024–2025 | ~68.0%* | 68.9% |
 | + Margin-of-victory Elo (replacing win/loss Elo) | 2024–2025 | 67.9% | 68.9% |
-| + Split offense/defense ratings (replacing combined Elo) | 2024–2025 | 68.2% | 68.9% |
+| + Split offense/defense ratings (replacing combined Elo) | 2024–2025 | 68.2%† | 68.9% |
 | **+ `spread_line` as a model feature (current production)** | held-out split | **Accuracy 64.7%, log loss 0.634, Brier 0.222** (up from 63.7% / 0.636 / 0.223 without it) | — |
 
 *These two rows used slightly different feature combinations along the way to the current production set — see "Tested and confirmed NOT to help" for the full, controlled A/B comparisons. **Production model** (`train_model.py`): plain logistic regression, ~61 features, trained on all 3028 games.
+
+†**Caveat (unplayed-games bug fix):** this result was likely measured before unplayed 2026 games were in the games table. Unplayed games (no scores) were being treated as completed, which made the league scoring average NaN inside `features/elo.py`, so the offense/defense rating features were NaN for every training game and the model effectively gave them zero weight. After the fix (unplayed games now get a missing `home_win`, and are excluded from training, the retrain test week, Elo updates and snapshots), a walk-forward backtest (each week of 2024–2026 predicted by a model trained only on earlier games; 663 games, 50 weeks) found the ratings are roughly **neutral**:
+
+| Setup | Accuracy | Log loss | Brier |
+|---|---|---|---|
+| Ratings off | 66.8% | 0.6142 | 0.2124 |
+| Ratings on | 66.5% | 0.6140 | 0.2125 |
+| Vegas favorite (same games) | 67.4% | — | — |
+
+The log-loss difference has a 95% confidence interval of [-0.004, +0.004], i.e. a statistical tie. Treat the "+0.3pts" gain from the ratings elsewhere in this document as unconfirmed under the current setup. The production model was retrained with the ratings working. (Note: the walk-forward numbers cover a different window and method than the table above, so they are not directly comparable to its rows.)
 
 ### A full round of "how do we improve accuracy further"
 
@@ -65,7 +75,7 @@ A systematic investigation was run covering algorithm choice, feature selection,
 
 **Did help — refining the existing best signal, and incorporating an external market signal:**
 - **Margin-of-victory Elo**: standard win/loss Elo treats a 1-point win the same as a 30-point blowout. Switching to the FiveThirtyEight NFL formula (update scales with `ln(margin+1)`, dampened by how large the pre-game rating gap already was) gave a real, if modest, gain (+0.2pts) and a more historically sensible rating (2016 Cleveland's Elo dropped from ~1364 under plain Elo to ~1232–1252 under MOV — a more accurate penalty for a team that likely lost many games badly).
-- **Splitting Elo into separate offense/defense ratings**: instead of one combined team-strength number, track two — offense (points scored vs. expectation, adjusted for opponent defense) and defense (points allowed vs. expectation, adjusted for opponent offense). Adding this *alongside* combined Elo hurt (-1.2pts, redundant/conflicting information) — but *replacing* combined Elo with it entirely gave a further real gain (+0.3pts on top of MOV Elo). **This is the current production Elo implementation.**
+- **Splitting Elo into separate offense/defense ratings**: instead of one combined team-strength number, track two — offense (points scored vs. expectation, adjusted for opponent defense) and defense (points allowed vs. expectation, adjusted for opponent offense). Adding this *alongside* combined Elo hurt (-1.2pts, redundant/conflicting information) — but *replacing* combined Elo with it entirely gave a further real gain (+0.3pts on top of MOV Elo) at the time. **This is the current production Elo implementation**, but see the caveat under the Model Performance Summary: that gain was not reproduced in a later walk-forward backtest (ratings on vs. off was a statistical tie), so it is kept as a reasonable team-strength representation rather than a proven accuracy win.
 - **`spread_line` (Vegas's point spread) as a raw model feature**: rather than only comparing the model's output to Vegas as an external benchmark, `spread_line` itself is now fed into the logistic regression alongside the engineered features. It's not redundant the way the hand-computed interaction terms were — a market spread encodes information the model's box-score-derived features structurally can't see (late-breaking injury/practice news, situational factors, the aggregated judgment of professional bettors), so it supplies a genuinely new residual signal rather than a recombination of existing ones. Held-out test: accuracy 63.7%→64.7%, log loss 0.636→0.634, Brier 0.223→0.222. **Framing note for explaining this feature**: the model isn't "beating" Vegas by using its own line — it's partially deferring to the market on the parts of the game only Vegas can see, which is a legitimate and explicitly-acknowledged modeling choice, not a shortcut to hide.
 
 **The clear, honest takeaway from this whole investigation: the real, durable gains came from (1) refining the model's single best signal (Elo) twice in succession, and (2) incorporating one genuinely external, information-rich signal (the Vegas line) — not from accumulating more unrelated box-score stats, more complex algorithms, or clever combination tricks. For this project's data size (~2500-3000 training games) and feature count, "build a better team-strength rating" or "bring in outside information the feature set structurally lacks" are meaningfully higher-leverage directions than "add another derived stat" or "try a fancier model."**
@@ -89,7 +99,7 @@ Discovered independently twice (star WR injury, two-minute-drill comeback). Some
 | `home_team` / `away_team` | Original/historical team codes |
 | `home_team_std` / `away_team_std` | Standardized codes for relocated franchises |
 | `home_score` / `away_score` | Final score |
-| `home_win` | **Target variable** |
+| `home_win` | **Target variable** (missing for unplayed games, which are excluded from training) |
 | `home_coach` / `away_coach` | Head coaches |
 | `home_rest` / `away_rest` | Days of rest |
 | `div_game` | `1` if divisional matchup |
@@ -111,7 +121,7 @@ Split offense/defense ratings, replacing combined Elo. Each team gets two separa
 | `home_off_rating_pre` / `away_off_rating_pre` | Points scored above/below league average, adjusted for opponent defense quality |
 | `home_def_rating_pre` / `away_def_rating_pre` | Points allowed below/above league average, adjusted for opponent offense quality |
 
-Updates use actual-vs-expected points each game, with a margin-of-victory-style learning rate (`k_off_def=0.05`), and revert 1/3 toward 0 at each season boundary. Historically validated: 2016 Cleveland's defense settles around -3.4 to -3.9, near the bottom of the real league range (~-4.8 to +4.9). **Kept as two separate numbers (not recombined) since a future live in-game model would likely want offense/defense tracked independently.**
+Only completed games update the ratings; unplayed games (no scores) are skipped. Updates use actual-vs-expected points each game, with a margin-of-victory-style learning rate (`k_off_def=0.05`), and revert 1/3 toward 0 at each season boundary. Historically validated: 2016 Cleveland's defense settles around -3.4 to -3.9, near the bottom of the real league range (~-4.8 to +4.9). **Kept as two separate numbers (not recombined) since a future live in-game model would likely want offense/defense tracked independently.**
 
 *(Prior implementations — plain win/loss Elo, then margin-of-victory combined Elo — are retired; see Model Performance Summary for the reasoning trail.)*
 
@@ -132,6 +142,9 @@ All verified real signals or, in the case of `defense_process_advantage`, verifi
 ## Live Prediction Pipeline (`src/predict_engine/`)
 
 The live pipeline is split into `snapshots.py` (builds each team's "current state" — form, ratings, current starters, recent stats — once per prediction run) and `matchup.py` (assembles one feature row for a specific upcoming game from those snapshots and runs it through the trained model).
+
+### ⚠️ Bug history: unplayed games treated as completed
+Games with no scores yet were treated as completed. Two effects: (1) in `features/elo.py` the league scoring average became NaN, so the offense/defense rating features were NaN for every training game and the model gave them zero weight; (2) the app's "current form" snapshot was computed from each team's last 5 *scheduled* (unplayed) games, and current off/def ratings were NaN. Fixed: unplayed games now have a missing `home_win`, and are excluded from training, the retrain pipeline's test week, Elo updates and the snapshots. The production model was retrained afterward with the ratings working. Impact on accuracy is roughly neutral (see Model Performance Summary).
 
 ### ⚠️ Bug history: "most recently played" vs. "actual current starter"
 Fixed for **QB**, **WR**, **TE**, **RB**, and **CB** using `nfl.load_depth_charts()` instead of "whoever played most recently" (breaks when an injured starter is replaced by backups late in a season — real example: KC's Mahomes injury, and Atlanta's move to a 3rd-string QB).

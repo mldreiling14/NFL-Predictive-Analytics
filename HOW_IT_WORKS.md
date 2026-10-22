@@ -10,14 +10,17 @@ Before every NFL game, the model looks at a bunch of information about both team
 
 It's not magic and it's not a sure thing. It's built the same way a smart, obsessive football fan would think about a game, just done with real numbers instead of gut feeling.
 
-**How good is it?** On actual games it's never seen before, it picks the right winner about **68% of the time** — close to what Vegas sportsbooks manage (about 69%). It doesn't beat Vegas, but it's not far off either, which is a genuinely solid result for a side project.
+**How good is it?** On actual games it's never seen before, it picks the right winner roughly **two times out of three**. In our most recent honest test — predicting every week of 2024–2026 using only information from earlier games, 663 games in total — it got about **66.5%** right, versus about **67.4%** for simply picking the Vegas favorite on the same games. Earlier tests on a different set of games showed numbers closer to 68%, so treat the exact figure as "around two-thirds." It doesn't beat Vegas, but it's not far off either, which is a genuinely solid result for a side project.
 
 ---
 
 ## What it actually looks at
 
 **How each team has been playing lately**
-Not just their overall record for the season, but specifically their last 5 games — are they hot right now, or in a slump? Includes both wins/losses and how big the margins have been.
+Not just their overall record for the season, but specifically their last 5 games — are they hot right now, or in a slump? Includes both wins/losses and how big the margins have been. Only games that have actually been played count — upcoming games on the schedule are ignored.
+
+**Separate offense and defense ratings**
+On top of the single power ranking, each team also gets one number for how good its offense is and one for how good its defense is (points scored or allowed compared with what you'd expect against that opponent). Fair warning: when we tested the model with and without these, the results were essentially a tie, so they're a sensible addition but not a proven boost. (They were also silently broken for a while because of a bug that counted unplayed games as played. That's fixed, and the model has been retrained.)
 
 **A "power ranking" for every team (Elo)**
 Similar to a chess rating. Every team gets a number that goes up when they win (especially against a good team) and down when they lose (especially to a weak one). This turns out to be the single most useful piece of information in the whole model — beating a great team means a lot more than beating a bad one, and this number captures that automatically.
