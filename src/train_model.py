@@ -47,6 +47,10 @@ def train_and_save_model(db_path="data/nfl.db", model_path="models/win_probabili
     df_full = pd.read_sql_query("SELECT * FROM games_with_features", conn)
     conn.close()
 
+    # Unplayed games have NaN scores, which would otherwise be labeled as
+    # home losses - only train on completed games
+    df_full = df_full.dropna(subset=['home_score', 'away_score'])
+
     df_full['home_win'] = (df_full['home_score'] > df_full['away_score']).astype(int)
 
     X = df_full[FEATURE_COLS].copy()
